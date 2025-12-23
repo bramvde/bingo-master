@@ -89,7 +89,7 @@ export const speakText = (text: string) => {
   window.speechSynthesis.cancel(); // Stop any current speech
   
   const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = 'nl-NL';
+  utterance.lang = 'nl-BE'; // Default to Flemish
   utterance.rate = 0.85; // Slightly slower for clarity
   utterance.pitch = 1.0;
 
@@ -98,23 +98,25 @@ export const speakText = (text: string) => {
     voices = window.speechSynthesis.getVoices();
   }
 
-  // Improved selection strategy for Dutch voices
-  // 1. Google Dutch (often high quality)
-  // 2. Microsoft Dutch
-  // 3. Exact locale match
-  // 4. Loose language match
-  const dutchVoice = voices.find(v => v.lang === 'nl-NL' && v.name.includes('Google'))
-    || voices.find(v => v.lang === 'nl-NL' && v.name.includes('Microsoft'))
+  // Improved selection strategy prioritizing Flemish voices
+  // 1. Flemish (nl-BE) voices - Google or Microsoft
+  // 2. Any Flemish (nl-BE) voice
+  // 3. Dutch (nl-NL) voices - Google or Microsoft
+  // 4. Any Dutch (nl-NL) voice
+  // 5. Any Dutch language variant (nl-*)
+  const flemishVoice = voices.find(v => v.lang === 'nl-BE' && (v.name.includes('Google') || v.name.includes('Microsoft')))
+    || voices.find(v => v.lang === 'nl-BE')
+    || voices.find(v => v.lang === 'nl-NL' && (v.name.includes('Google') || v.name.includes('Microsoft')))
     || voices.find(v => v.lang === 'nl-NL')
     || voices.find(v => v.lang.startsWith('nl'));
   
-  if (dutchVoice) {
-    utterance.voice = dutchVoice;
+  if (flemishVoice) {
+    utterance.voice = flemishVoice;
     // Explicitly set the lang of the utterance to match the voice
-    utterance.lang = dutchVoice.lang;
+    utterance.lang = flemishVoice.lang;
   } else {
     // Fallback info for debugging
-    console.log("No specific Dutch voice found. Using default voice with nl-NL locale hint.");
+    console.log("No specific Flemish or Dutch voice found. Using default voice with nl-BE locale hint.");
   }
 
   window.speechSynthesis.speak(utterance);
