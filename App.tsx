@@ -6,6 +6,7 @@ import { BingoMachine } from './components/BingoMachine';
 import { Controls } from './components/Controls';
 import { LastBalls } from './components/LastBalls';
 import { initAudio, playPop, playTick, speakText } from './utils/sound';
+import { generateBingoCardsPdf } from './utils/cardGenerator';
 
 const App: React.FC = () => {
   const [history, setHistory] = useState<number[]>([]);
@@ -17,6 +18,7 @@ const App: React.FC = () => {
   const [showPhrases, setShowPhrases] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   // Load from local storage on mount
   useEffect(() => {
@@ -117,6 +119,20 @@ const App: React.FC = () => {
     }
   }, [history, showPhrases]);
 
+  const handlePrintCards = useCallback(async () => {
+    setIsGeneratingPdf(true);
+    try {
+      // Small delay to show feedback if needed, though jsPDF is fast for this
+      await new Promise(resolve => setTimeout(resolve, 100)); 
+      generateBingoCardsPdf();
+    } catch (e) {
+      console.error("Failed to generate PDF", e);
+      alert("Er ging iets mis bij het maken van de kaarten.");
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  }, []);
+
   // Helper for Toggle Switch
   const Toggle = ({ label, checked, onChange, icon }: { label: string, checked: boolean, onChange: (v: boolean) => void, icon: React.ReactNode }) => (
     <label className="flex items-center cursor-pointer gap-2 select-none group" title={label}>
@@ -148,7 +164,24 @@ const App: React.FC = () => {
         </div>
         
         <div className="flex items-center gap-3 sm:gap-6 text-xs sm:text-sm">
-          <div className="px-3 py-1 rounded-full bg-gray-800 border border-gray-700 hidden xs:block">
+          
+          <button 
+            onClick={handlePrintCards}
+            disabled={isGeneratingPdf}
+            className={`
+              flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-700 
+              transition-all text-gray-300 hover:text-white hover:border-gray-500
+              ${isGeneratingPdf ? 'opacity-50 cursor-wait' : 'hover:bg-gray-800'}
+            `}
+            title="Genereer en print 4 Bingo kaarten"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+              <path fillRule="evenodd" d="M7.875 1.5a.75.75 0 01.75.75v2.25h6.75a.75.75 0 01.75.75v3h3.75a.75.75 0 01.75.75v6.75a.75.75 0 01-.75.75h-1.5v2.25a.75.75 0 01-.75.75h-13.5a.75.75 0 01-.75-.75v-2.25H1.5a.75.75 0 01-.75-.75v-6.75a.75.75 0 01.75-.75h3.75v-3a.75.75 0 01.75-.75h.75zM6 6v1.5h12V6H6zm11.25 6.75a.75.75 0 100-1.5.75.75 0 000 1.5zM15.75 16.5h-7.5v4.5h7.5v-4.5z" clipRule="evenodd" />
+            </svg>
+            <span className="hidden xs:inline">{isGeneratingPdf ? 'Bezig...' : 'Print Kaarten'}</span>
+          </button>
+
+          <div className="px-3 py-1 rounded-full bg-gray-800 border border-gray-700 hidden md:block">
             <span className="text-gray-400 mr-2">Ballen:</span>
             <span className="font-bold text-white">{history.length} / {TOTAL_NUMBERS}</span>
           </div>
