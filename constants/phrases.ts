@@ -74,4 +74,4 @@ export const BINGO_PHRASES: Record<number, string> = {
   73: "Hou vol, we zijn er bijna",
   74: "Nog eentje dan… allez",
   75: "’t Is gedaan — BINGO!"
-};
+}; 
