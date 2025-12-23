@@ -1,0 +1,239 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { TOTAL_NUMBERS, getLetterForNumber } from './constants';
+import { BINGO_PHRASES } from './constants/phrases';
+import { BingoBoard } from './components/BingoBoard';
+import { BingoMachine } from './components/BingoMachine';
+import { Controls } from './components/Controls';
+import { LastBalls } from './components/LastBalls';
+import { initAudio, playPop, playTick, speakText } from './utils/sound';
+
+const App: React.FC = () => {
+  const [history, setHistory] = useState<number[]>([]);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [currentBall, setCurrentBall] = useState<number | null>(null);
+  const [generatedPhrase, setGeneratedPhrase] = useState<string | null>(null);
+  
+  // Settings
+  const [showPhrases, setShowPhrases] = useState(true);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+
+  // Load from local storage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('bingoState');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setHistory(parsed.history || []);
+        setCurrentBall(parsed.currentBall || null);
+        setGeneratedPhrase(parsed.generatedPhrase || null);
+      } catch (e) {
+        console.error("Failed to load state", e);
+      }
+    }
+  }, []);
+
+  // Save to local storage on change
+  useEffect(() => {
+    localStorage.setItem('bingoState', JSON.stringify({
+      history,
+      currentBall,
+      generatedPhrase
+    }));
+  }, [history, currentBall, generatedPhrase]);
+
+  const handleDraw = useCallback(() => {
+    if (history.length >= TOTAL_NUMBERS) return;
+
+    // Initialize audio context on user interaction
+    initAudio();
+
+    setIsAnimating(true);
+    setGeneratedPhrase(null);
+
+    // Calculate available numbers
+    const available = [];
+    for (let i = 1; i <= TOTAL_NUMBERS; i++) {
+      if (!history.includes(i)) available.push(i);
+    }
+
+    const nextNum = available[Math.floor(Math.random() * available.length)];
+
+    // Sound Loop during animation
+    const tickInterval = setInterval(() => {
+      if (soundEnabled) playTick();
+    }, 120);
+
+    // Animation delay (2.5s)
+    setTimeout(() => {
+      clearInterval(tickInterval);
+      setIsAnimating(false);
+      setCurrentBall(nextNum);
+      setHistory(prev => [...prev, nextNum]);
+
+      const phrase = BINGO_PHRASES[nextNum] || `Nummer ${nextNum}`;
+      
+      if (showPhrases) {
+        setGeneratedPhrase(phrase);
+      }
+
+      // Final reveal effects
+      if (soundEnabled) playPop();
+
+      if (voiceEnabled) {
+        const letter = getLetterForNumber(nextNum);
+        const textToSpeak = showPhrases 
+          ? `${letter} ${nextNum}. ${phrase}`
+          : `${letter} ${nextNum}`;
+        speakText(textToSpeak);
+      }
+
+    }, 2500); 
+
+  }, [history, showPhrases, soundEnabled, voiceEnabled]);
+
+  const handleReset = useCallback(() => {
+    if (window.confirm("Weet je zeker dat je een nieuw spel wilt starten?")) {
+      setHistory([]);
+      setCurrentBall(null);
+      setGeneratedPhrase(null);
+      window.speechSynthesis.cancel();
+    }
+  }, []);
+
+  const handleUndo = useCallback(() => {
+    if (history.length === 0) return;
+    
+    const newHistory = history.slice(0, -1);
+    setHistory(newHistory);
+    
+    const prevBall = newHistory.length > 0 ? newHistory[newHistory.length - 1] : null;
+    setCurrentBall(prevBall);
+    
+    if (prevBall && showPhrases) {
+       setGeneratedPhrase(BINGO_PHRASES[prevBall] || `Nummer ${prevBall}`);
+    } else {
+       setGeneratedPhrase(null);
+    }
+  }, [history, showPhrases]);
+
+  // Helper for Toggle Switch
+  const Toggle = ({ label, checked, onChange, icon }: { label: string, checked: boolean, onChange: (v: boolean) => void, icon: React.ReactNode }) => (
+    <label className="flex items-center cursor-pointer gap-2 select-none group" title={label}>
+      <div className="relative">
+        <input 
+          type="checkbox" 
+          className="sr-only peer"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+        />
+        <div className="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600 transition-colors"></div>
+      </div>
+      <div className="text-gray-400 group-hover:text-white transition-colors">
+        {icon}
+      </div>
+      <span className="text-gray-300 font-medium hidden lg:inline text-sm">{label}</span>
+    </label>
+  );
+
+  return (
+    <div className="h-screen w-screen bg-bingo-dark text-white flex flex-col overflow-hidden">
+      {/* Compact Header */}
+      <header className="h-14 min-h-[56px] px-4 border-b border-gray-800 bg-gray-900/50 backdrop-blur-sm flex items-center justify-between shrink-0 z-20">
+        <div className="flex items-center gap-3">
+           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center font-bold text-lg shadow-lg shrink-0">B</div>
+           <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400 hidden sm:block">
+             Bingo Master
+           </h1>
+        </div>
+        
+        <div className="flex items-center gap-3 sm:gap-6 text-xs sm:text-sm">
+          <div className="px-3 py-1 rounded-full bg-gray-800 border border-gray-700 hidden xs:block">
+            <span className="text-gray-400 mr-2">Ballen:</span>
+            <span className="font-bold text-white">{history.length} / {TOTAL_NUMBERS}</span>
+          </div>
+
+          <div className="flex items-center gap-3 sm:gap-4 border-l border-gray-700 pl-3 sm:pl-4">
+            
+            {/* Zinnen Toggle */}
+            <Toggle 
+              label="Zinnen" 
+              checked={showPhrases} 
+              onChange={setShowPhrases}
+              icon={
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                  <path fillRule="evenodd" d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97a48.901 48.901 0 01-3.476.383.39.39 0 00-.297.17l-2.755 4.133a.75.75 0 01-1.248 0l-2.755-4.133a.39.39 0 00-.297-.17 48.9 48.9 0 01-3.476-.384c-1.978-.29-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.68 3.348-3.97zM6.75 8.25a.75.75 0 01.75-.75h9a.75.75 0 010 1.5h-9a.75.75 0 01-.75-.75zm.75 2.25a.75.75 0 000 1.5H12a.75.75 0 000-1.5H7.5z" clipRule="evenodd" />
+                </svg>
+              }
+            />
+
+            {/* Geluid Toggle */}
+            <Toggle 
+              label="Geluid" 
+              checked={soundEnabled} 
+              onChange={setSoundEnabled}
+              icon={
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                  <path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318.664-2.66 1.905A9.76 9.76 0 001.5 12c0 .898.121 1.768.35 2.595.341 1.24 1.518 1.905 2.659 1.905h1.93l4.5 4.5c.945.945 2.561.276 2.561-1.06V4.06zM18.584 5.106a.75.75 0 011.06 0c3.808 3.807 3.808 9.98 0 13.788a.75.75 0 11-1.06-1.06 8.25 8.25 0 000-11.668.75.75 0 010-1.06z" />
+                  <path d="M15.932 7.757a.75.75 0 011.061 0 6 6 0 010 8.486.75.75 0 01-1.06-1.061 4.5 4.5 0 000-6.364.75.75 0 010-1.06z" />
+                </svg>
+              }
+            />
+
+            {/* Stem Toggle */}
+            <Toggle 
+              label="Stem" 
+              checked={voiceEnabled} 
+              onChange={setVoiceEnabled}
+              icon={
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                  <path d="M8.25 4.5a3.75 3.75 0 117.5 0v8.25a3.75 3.75 0 11-7.5 0V4.5z" />
+                  <path d="M6 10.5a.75.75 0 01.75.75v1.5a5.25 5.25 0 1010.5 0v-1.5a.75.75 0 011.5 0v1.5a6.751 6.751 0 01-6 6.709v2.291h3a.75.75 0 010 1.5h-7.5a.75.75 0 010-1.5h3v-2.291a6.751 6.751 0 01-6-6.709v-1.5A.75.75 0 016 10.5z" />
+                </svg>
+              }
+            />
+          </div>
+        </div>
+      </header>
+
+      {/* Main Layout Area */}
+      <main className="flex-1 flex overflow-hidden">
+        
+        {/* LEFT: Game Stage (Flexible width) */}
+        <div className="flex-[2] flex flex-col items-center justify-between p-4 gap-4 relative">
+          
+          <div className="flex-1 w-full flex flex-col items-center justify-center gap-6">
+            <BingoMachine 
+              currentBall={currentBall} 
+              isAnimating={isAnimating}
+              generatedPhrase={generatedPhrase}
+            />
+            
+            <Controls 
+              onDraw={handleDraw}
+              onReset={handleReset}
+              onUndo={handleUndo}
+              canDraw={history.length < TOTAL_NUMBERS}
+              canUndo={history.length > 0}
+              isAnimating={isAnimating}
+              gameActive={history.length > 0}
+            />
+          </div>
+
+          {/* Last 5 Balls at the bottom */}
+          <div className="w-full flex justify-center pb-2 shrink-0 h-32">
+            <LastBalls history={history} currentBall={currentBall} />
+          </div>
+        </div>
+
+        {/* RIGHT: Tracker Sidebar (Fixed width on desktop, flex on smaller) */}
+        <div className="w-64 sm:w-80 md:w-96 bg-gray-900 border-l border-gray-800 h-full p-2 shrink-0 z-10 shadow-2xl">
+          <BingoBoard history={history} />
+        </div>
+        
+      </main>
+    </div>
+  );
+};
+
+export default App;

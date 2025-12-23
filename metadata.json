@@ -1,0 +1,5 @@
+{
+  "name": "Bingo Master AI",
+  "description": "A visually stunning Bingo caller application featuring a tracking grid, game controls, and an optional AI announcer powered by Gemini.",
+  "requestFramePermissions": []
+}
