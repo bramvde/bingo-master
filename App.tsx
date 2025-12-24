@@ -5,20 +5,27 @@ import { BingoBoard } from './components/BingoBoard';
 import { BingoMachine } from './components/BingoMachine';
 import { Controls } from './components/Controls';
 import { LastBalls } from './components/LastBalls';
-import { initAudio, playPop, playTick, speakText } from './utils/sound';
+import { ChristmasScene } from './components/ChristmasScene';
+import { Fireworks } from './components/Fireworks';
+import { initAudio, playPop, playTick, playJingle, speakText, startChristmasAmbience, stopChristmasAmbience } from './utils/sound';
 import { generateBingoCardsPdf } from './utils/cardGenerator';
+import { Theme } from './types';
 
 const App: React.FC = () => {
   const [history, setHistory] = useState<number[]>([]);
   const [isAnimating, setIsAnimating] = useState(false);
   const [currentBall, setCurrentBall] = useState<number | null>(null);
   const [generatedPhrase, setGeneratedPhrase] = useState<string | null>(null);
+  const [fireworkTrigger, setFireworkTrigger] = useState(0);
   
   // Settings
   const [showPhrases, setShowPhrases] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [theme, setTheme] = useState<Theme>('default');
+
+  const isXmas = theme === 'christmas';
 
   // Load from local storage on mount
   useEffect(() => {
@@ -29,6 +36,7 @@ const App: React.FC = () => {
         setHistory(parsed.history || []);
         setCurrentBall(parsed.currentBall || null);
         setGeneratedPhrase(parsed.generatedPhrase || null);
+        if (parsed.theme) setTheme(parsed.theme);
       } catch (e) {
         console.error("Failed to load state", e);
       }
@@ -40,16 +48,26 @@ const App: React.FC = () => {
     localStorage.setItem('bingoState', JSON.stringify({
       history,
       currentBall,
-      generatedPhrase
+      generatedPhrase,
+      theme
     }));
-  }, [history, currentBall, generatedPhrase]);
+  }, [history, currentBall, generatedPhrase, theme]);
+
+  // Manage Ambient Sound
+  useEffect(() => {
+    if (isXmas && soundEnabled) {
+      // Audio Context must be resumed by interaction first, but we attempt to start it.
+      startChristmasAmbience();
+    } else {
+      stopChristmasAmbience();
+    }
+    return () => stopChristmasAmbience();
+  }, [isXmas, soundEnabled]);
 
   const handleDraw = useCallback(() => {
     if (history.length >= TOTAL_NUMBERS) return;
 
-    // Initialize audio context on user interaction
     initAudio();
-
     setIsAnimating(true);
     setGeneratedPhrase(null);
 
@@ -63,10 +81,21 @@ const App: React.FC = () => {
 
     // Sound Loop during animation
     const tickInterval = setInterval(() => {
-      if (soundEnabled) playTick();
+      if (soundEnabled) {
+        if (isXmas) {
+          playJingle();
+        } else {
+          playTick();
+        }
+      }
     }, 120);
 
-    // Animation delay (2.5s)
+    // Trigger Fireworks Launch (1.5s into animation, so they fly for 1s and explode at 2.5s)
+    setTimeout(() => {
+      setFireworkTrigger(t => t + 1);
+    }, 1500);
+
+    // Final Reveal (2.5s)
     setTimeout(() => {
       clearInterval(tickInterval);
       setIsAnimating(false);
@@ -92,7 +121,7 @@ const App: React.FC = () => {
 
     }, 2500); 
 
-  }, [history, showPhrases, soundEnabled, voiceEnabled]);
+  }, [history, showPhrases, soundEnabled, voiceEnabled, isXmas]);
 
   const handleReset = useCallback(() => {
     if (window.confirm("Weet je zeker dat je een nieuw spel wilt starten?")) {
@@ -122,7 +151,6 @@ const App: React.FC = () => {
   const handlePrintCards = useCallback(async () => {
     setIsGeneratingPdf(true);
     try {
-      // Small delay to show feedback if needed, though jsPDF is fast for this
       await new Promise(resolve => setTimeout(resolve, 100)); 
       generateBingoCardsPdf();
     } catch (e) {
@@ -133,7 +161,11 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Helper for Toggle Switch
+  const toggleTheme = () => {
+    initAudio(); 
+    setTheme(prev => prev === 'default' ? 'christmas' : 'default');
+  };
+
   const Toggle = ({ label, checked, onChange, icon }: { label: string, checked: boolean, onChange: (v: boolean) => void, icon: React.ReactNode }) => (
     <label className="flex items-center cursor-pointer gap-2 select-none group" title={label}>
       <div className="relative">
@@ -141,7 +173,10 @@ const App: React.FC = () => {
           type="checkbox" 
           className="sr-only peer"
           checked={checked}
-          onChange={(e) => onChange(e.target.checked)}
+          onChange={(e) => {
+            initAudio(); 
+            onChange(e.target.checked);
+          }}
         />
         <div className="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600 transition-colors"></div>
       </div>
@@ -153,25 +188,42 @@ const App: React.FC = () => {
   );
 
   return (
-    <div className="h-screen w-screen bg-bingo-dark text-white flex flex-col overflow-hidden">
+    <div className={`h-screen w-screen text-white flex flex-col overflow-hidden transition-all duration-700 relative ${isXmas ? 'bg-slate-900' : 'bg-bingo-dark'}`}>
+      
+      {/* Dynamic Background Layer */}
+      <ChristmasScene active={isXmas} />
+      
+      {/* Fireworks Layer (always rendered, transparent when inactive) */}
+      <Fireworks trigger={fireworkTrigger} theme={theme} />
+
       {/* Compact Header */}
-      <header className="h-14 min-h-[56px] px-4 border-b border-gray-800 bg-gray-900/50 backdrop-blur-sm flex items-center justify-between shrink-0 z-20">
+      <header className={`h-14 min-h-[56px] px-4 border-b flex items-center justify-between shrink-0 z-20 backdrop-blur-sm transition-colors duration-500 ${isXmas ? 'bg-red-950/60 border-red-900' : 'bg-gray-900/50 border-gray-800'}`}>
         <div className="flex items-center gap-3">
-           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center font-bold text-lg shadow-lg shrink-0">B</div>
-           <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400 hidden sm:block">
-             Bingo Master
+           <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-lg shadow-lg shrink-0 ${isXmas ? 'bg-gradient-to-br from-red-500 to-green-600 border border-yellow-400' : 'bg-gradient-to-br from-pink-500 to-purple-600'}`}>
+             {isXmas ? '🎄' : 'B'}
+           </div>
+           <h1 className={`text-xl font-bold bg-clip-text text-transparent hidden sm:block ${isXmas ? 'bg-gradient-to-r from-red-400 to-green-400' : 'bg-gradient-to-r from-blue-400 to-purple-400'}`}>
+             {isXmas ? 'Kerst Bingo' : 'Bingo Master'}
            </h1>
         </div>
         
         <div className="flex items-center gap-3 sm:gap-6 text-xs sm:text-sm">
           
           <button 
+            onClick={toggleTheme}
+            className={`p-2 rounded-full transition-colors ${isXmas ? 'bg-white/10 hover:bg-white/20 text-yellow-300' : 'bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white'}`}
+            title="Wissel Thema"
+          >
+             {isXmas ? '❄️' : '🎨'}
+          </button>
+
+          <button 
             onClick={handlePrintCards}
             disabled={isGeneratingPdf}
             className={`
-              flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-700 
-              transition-all text-gray-300 hover:text-white hover:border-gray-500
-              ${isGeneratingPdf ? 'opacity-50 cursor-wait' : 'hover:bg-gray-800'}
+              flex items-center gap-2 px-3 py-1.5 rounded-lg border
+              transition-all text-gray-300 hover:text-white
+              ${isGeneratingPdf ? 'opacity-50 cursor-wait' : isXmas ? 'border-red-700 hover:bg-red-900' : 'border-gray-700 hover:bg-gray-800 hover:border-gray-500'}
             `}
             title="Genereer en print 4 Bingo kaarten"
           >
@@ -181,14 +233,13 @@ const App: React.FC = () => {
             <span className="hidden xs:inline">{isGeneratingPdf ? 'Bezig...' : 'Print Kaarten'}</span>
           </button>
 
-          <div className="px-3 py-1 rounded-full bg-gray-800 border border-gray-700 hidden md:block">
+          <div className={`px-3 py-1 rounded-full border hidden md:block ${isXmas ? 'bg-red-900/30 border-red-800' : 'bg-gray-800 border-gray-700'}`}>
             <span className="text-gray-400 mr-2">Ballen:</span>
             <span className="font-bold text-white">{history.length} / {TOTAL_NUMBERS}</span>
           </div>
 
-          <div className="flex items-center gap-3 sm:gap-4 border-l border-gray-700 pl-3 sm:pl-4">
+          <div className={`flex items-center gap-3 sm:gap-4 border-l pl-3 sm:pl-4 ${isXmas ? 'border-red-900' : 'border-gray-700'}`}>
             
-            {/* Zinnen Toggle */}
             <Toggle 
               label="Zinnen" 
               checked={showPhrases} 
@@ -200,7 +251,6 @@ const App: React.FC = () => {
               }
             />
 
-            {/* Geluid Toggle */}
             <Toggle 
               label="Geluid" 
               checked={soundEnabled} 
@@ -213,7 +263,6 @@ const App: React.FC = () => {
               }
             />
 
-            {/* Stem Toggle */}
             <Toggle 
               label="Stem" 
               checked={voiceEnabled} 
@@ -230,7 +279,7 @@ const App: React.FC = () => {
       </header>
 
       {/* Main Layout Area */}
-      <main className="flex-1 flex overflow-hidden">
+      <main className="flex-1 flex overflow-hidden z-10">
         
         {/* LEFT: Game Stage (Flexible width) */}
         <div className="flex-[2] flex flex-col items-center justify-between p-4 gap-4 relative">
@@ -240,6 +289,7 @@ const App: React.FC = () => {
               currentBall={currentBall} 
               isAnimating={isAnimating}
               generatedPhrase={generatedPhrase}
+              theme={theme}
             />
             
             <Controls 
@@ -250,18 +300,19 @@ const App: React.FC = () => {
               canUndo={history.length > 0}
               isAnimating={isAnimating}
               gameActive={history.length > 0}
+              theme={theme}
             />
           </div>
 
           {/* Last 5 Balls at the bottom */}
           <div className="w-full flex justify-center pb-2 shrink-0 h-32">
-            <LastBalls history={history} currentBall={currentBall} />
+            <LastBalls history={history} currentBall={currentBall} theme={theme} />
           </div>
         </div>
 
         {/* RIGHT: Tracker Sidebar (Fixed width on desktop, flex on smaller) */}
-        <div className="w-64 sm:w-80 md:w-96 bg-gray-900 border-l border-gray-800 h-full p-2 shrink-0 z-10 shadow-2xl">
-          <BingoBoard history={history} />
+        <div className={`w-64 sm:w-80 md:w-96 border-l h-full p-2 shrink-0 z-10 shadow-2xl transition-colors duration-500 backdrop-blur-sm ${isXmas ? 'bg-green-950/80 border-green-900' : 'bg-gray-900 border-gray-800'}`}>
+          <BingoBoard history={history} theme={theme} />
         </div>
         
       </main>

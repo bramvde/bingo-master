@@ -1,4 +1,5 @@
 import React from 'react';
+import { Theme } from '../types';
 
 interface ControlsProps {
   onDraw: () => void;
@@ -8,6 +9,7 @@ interface ControlsProps {
   canUndo: boolean;
   isAnimating: boolean;
   gameActive: boolean;
+  theme: Theme;
 }
 
 export const Controls: React.FC<ControlsProps> = ({
@@ -17,11 +19,14 @@ export const Controls: React.FC<ControlsProps> = ({
   canDraw,
   canUndo,
   isAnimating,
-  gameActive
+  gameActive,
+  theme
 }) => {
+  const isXmas = theme === 'christmas';
+
   return (
-    <div className="flex flex-wrap gap-4 justify-center w-full z-10">
-      <div className="bg-gray-800/50 p-2 rounded-2xl border border-gray-700/50 flex gap-3">
+    <div className="flex flex-wrap gap-4 justify-center w-full z-10 pt-4"> {/* Added padding top for ornament clearance */}
+      <div className={`p-2 rounded-2xl border flex gap-3 ${isXmas ? 'bg-red-950/50 border-red-800' : 'bg-gray-800/50 border-gray-700/50'}`}>
         <button
           onClick={onDraw}
           disabled={!canDraw || isAnimating}
@@ -29,10 +34,13 @@ export const Controls: React.FC<ControlsProps> = ({
             px-8 py-3 rounded-xl font-bold text-lg uppercase tracking-wide transition-all shadow-lg transform active:scale-95
             ${!canDraw || isAnimating 
               ? 'bg-gray-700 text-gray-500 cursor-not-allowed' 
-              : 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white shadow-green-900/20 hover:shadow-green-500/30'}
+              : isXmas 
+                ? 'bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white shadow-red-900/40 border border-red-500'
+                : 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white shadow-green-900/20 hover:shadow-green-500/30'
+            }
           `}
         >
-          {isAnimating ? 'Rollen...' : 'Bal Trekken'}
+          {isAnimating ? 'Rollen...' : isXmas ? '🎄 Trekken 🎄' : 'Bal Trekken'}
         </button>
 
         <button
@@ -42,7 +50,10 @@ export const Controls: React.FC<ControlsProps> = ({
             px-4 py-3 rounded-xl font-semibold text-white transition-all transform active:scale-95
             ${!canUndo || isAnimating
               ? 'bg-gray-800 text-gray-600 cursor-not-allowed'
-              : 'bg-gray-700 hover:bg-gray-600 border border-gray-600'}
+              : isXmas
+                ? 'bg-green-800 hover:bg-green-700 border border-green-600'
+                : 'bg-gray-700 hover:bg-gray-600 border border-gray-600'
+            }
           `}
           title="Laatste bal ongedaan maken"
         >

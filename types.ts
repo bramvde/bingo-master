@@ -1,5 +1,7 @@
 export type BingoLetter = 'B' | 'I' | 'N' | 'G' | 'O';
 
+export type Theme = 'default' | 'christmas';
+
 export interface BingoBallData {
   number: number;
   letter: BingoLetter;
