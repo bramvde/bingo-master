@@ -17,6 +17,7 @@ const App: React.FC = () => {
   const [currentBall, setCurrentBall] = useState<number | null>(null);
   const [generatedPhrase, setGeneratedPhrase] = useState<string | null>(null);
   const [fireworkTrigger, setFireworkTrigger] = useState(0);
+  const [isFullScreen, setIsFullScreen] = useState(false);
   
   // Settings
   const [showPhrases, setShowPhrases] = useState(true);
@@ -63,6 +64,24 @@ const App: React.FC = () => {
     }
     return () => stopChristmasAmbience();
   }, [isXmas, soundEnabled]);
+
+  useEffect(() => {
+    const handleFullScreenChange = () => {
+      setIsFullScreen(document.fullscreenElement !== null);
+    };
+    document.addEventListener('fullscreenchange', handleFullScreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullScreenChange);
+  }, []);
+
+  const toggleFullScreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(err => console.error('Failed to enter full screen', err));
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    }
+  };
 
   const handleDraw = useCallback(() => {
     if (history.length >= TOTAL_NUMBERS) return;
@@ -208,6 +227,16 @@ const App: React.FC = () => {
         </div>
         
         <div className="flex items-center gap-3 sm:gap-6 text-xs sm:text-sm">
+
+          {/* Fullscreen toggle */}
+          <button 
+            onClick={toggleFullScreen}
+            className={`p-2 rounded-full transition-colors ${isXmas ? 'bg-white/10 hover:bg-white/20 text-yellow-300' : 'bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white'}`}
+            title={isFullScreen ? "Sluit volledig scherm" : "Open volledig scherm"}
+          >
+            {isFullScreen ? '🔓' : '🔒'}
+          </button>
+
           
           <button 
             onClick={toggleTheme}
