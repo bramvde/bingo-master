@@ -2,18 +2,12 @@ let audioCtx: AudioContext | null = null;
 let voices: SpeechSynthesisVoice[] = [];
 let ambienceNodes: { stop: () => void } | null = null;
 
-// Initialize voice loading immediately to handle async loading in browsers like Chrome
-if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-  const loadVoices = () => {
-    voices = window.speechSynthesis.getVoices();
-  };
-  
-  loadVoices();
-  
-  if (window.speechSynthesis.onvoiceschanged !== undefined) {
-    window.speechSynthesis.onvoiceschanged = loadVoices;
-  }
-}
+// Absolute path is standard for public assets
+const SANTA_SOUND_URL = '/sounds/santa-claus.mp3';
+
+let santaBuffer: AudioBuffer | null = null;
+let santaLoading = false;
+let santaAudioFailed = false;
 
 const getCtx = () => {
   if (!audioCtx) {
@@ -22,15 +16,82 @@ const getCtx = () => {
   return audioCtx;
 };
 
+// Fallback Synth if file is missing/broken
+const playSynthSanta = () => {
+  try {
+    const ctx = getCtx();
+    const t = ctx.currentTime;
+    
+    // Deep "Ho Ho Ho" pattern
+    [0, 0.6, 1.2].forEach((offset) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const filter = ctx.createBiquadFilter();
+
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(120, t + offset); 
+        osc.frequency.linearRampToValueAtTime(80, t + offset + 0.3); 
+
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(800, t + offset);
+        filter.frequency.linearRampToValueAtTime(400, t + offset + 0.3);
+
+        gain.gain.setValueAtTime(0, t + offset);
+        gain.gain.linearRampToValueAtTime(0.5, t + offset + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.01, t + offset + 0.4);
+
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(t + offset);
+        osc.stop(t + offset + 0.5);
+    });
+  } catch (e) {
+    console.error("Synth failed", e);
+  }
+};
+
+const loadSantaSound = async () => {
+  if (santaBuffer || santaLoading || santaAudioFailed) return;
+  
+  santaLoading = true;
+  try {
+    const ctx = getCtx();
+    const response = await fetch(SANTA_SOUND_URL);
+    
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.status}`);
+    }
+    
+    const arrayBuffer = await response.arrayBuffer();
+    santaBuffer = await ctx.decodeAudioData(arrayBuffer);
+    console.log("Santa audio loaded successfully via Web Audio API");
+  } catch (error) {
+    console.warn("Failed to load Santa MP3 buffer. Using synth fallback.", error);
+    santaAudioFailed = true;
+  } finally {
+    santaLoading = false;
+  }
+};
+
 export const initAudio = () => {
   const ctx = getCtx();
   if (ctx.state === 'suspended') {
     ctx.resume().catch(() => {});
   }
   
-  // Ensure voices are loaded when user interacts
-  if (voices.length === 0 && 'speechSynthesis' in window) {
-    voices = window.speechSynthesis.getVoices();
+  // Start loading the MP3 immediately
+  loadSantaSound();
+
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    const loadVoices = () => {
+      voices = window.speechSynthesis.getVoices();
+    };
+    loadVoices();
+    if (window.speechSynthesis.onvoiceschanged !== undefined) {
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
   }
 };
 
@@ -41,7 +102,6 @@ export const playTick = () => {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
 
-    // Woodblock / Click sound
     osc.type = 'triangle'; 
     osc.frequency.setValueAtTime(800, t);
     osc.frequency.exponentialRampToValueAtTime(100, t + 0.05);
@@ -54,9 +114,7 @@ export const playTick = () => {
 
     osc.start();
     osc.stop(t + 0.05);
-  } catch (e) {
-    // Ignore audio errors
-  }
+  } catch (e) {}
 };
 
 export const playJingle = () => {
@@ -64,7 +122,6 @@ export const playJingle = () => {
     const ctx = getCtx();
     const t = ctx.currentTime;
 
-    // Create a burst of high frequency sounds to simulate sleigh bells
     const frequencies = [2000, 2400, 3000, 4200, 6000];
     
     frequencies.forEach((freq) => {
@@ -72,14 +129,11 @@ export const playJingle = () => {
       const gain = ctx.createGain();
       
       osc.type = 'sine';
-      // Randomize frequency slightly for realism
       osc.frequency.value = freq + (Math.random() * 200 - 100);
       
-      // Randomize start time slightly (within 20ms) to create "shaking" effect
       const startOffset = Math.random() * 0.02;
 
       gain.gain.setValueAtTime(0, t);
-      // Fast attack, medium decay
       gain.gain.linearRampToValueAtTime(0.03, t + startOffset + 0.01); 
       gain.gain.exponentialRampToValueAtTime(0.001, t + startOffset + 0.3);
 
@@ -90,23 +144,53 @@ export const playJingle = () => {
       osc.stop(t + startOffset + 0.35);
     });
 
-  } catch (e) {
-    // Ignore
+  } catch (e) {}
+};
+
+export const playSanta = () => {
+  if (typeof window === 'undefined') return;
+
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.cancel();
   }
+
+  // 1. If buffer is ready, play it
+  if (santaBuffer) {
+    try {
+      const ctx = getCtx();
+      const source = ctx.createBufferSource();
+      source.buffer = santaBuffer;
+      source.connect(ctx.destination);
+      source.start(0);
+    } catch (e) {
+      console.error("Error playing Santa buffer", e);
+      playSynthSanta();
+    }
+    return;
+  }
+
+  // 2. If failed, use synth
+  if (santaAudioFailed) {
+    playSynthSanta();
+    return;
+  }
+
+  // 3. If still loading or not started, try loading again and play synth for now
+  loadSantaSound();
+  playSynthSanta();
 };
 
 export const startChristmasAmbience = () => {
-  if (ambienceNodes) return; // Already playing
+  if (ambienceNodes) return;
 
   try {
     const ctx = getCtx();
     
-    // 1. Wind Noise
-    const bufferSize = ctx.sampleRate * 2; // 2 seconds buffer
+    const bufferSize = ctx.sampleRate * 2;
     const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
     const data = buffer.getChannelData(0);
     for (let i = 0; i < bufferSize; i++) {
-      data[i] = Math.random() * 2 - 1; // White noise
+      data[i] = Math.random() * 2 - 1;
     }
 
     const noise = ctx.createBufferSource();
@@ -118,15 +202,14 @@ export const startChristmasAmbience = () => {
     filter.frequency.value = 400;
 
     const gain = ctx.createGain();
-    gain.gain.value = 0.02; // Very quiet wind
+    gain.gain.value = 0.02;
 
-    // LFO to modulate wind frequency slightly (swirling effect)
     const lfo = ctx.createOscillator();
     lfo.type = 'sine';
-    lfo.frequency.value = 0.1; // Slow wave (10 seconds)
+    lfo.frequency.value = 0.1;
     
     const lfoGain = ctx.createGain();
-    lfoGain.gain.value = 200; // Modulate filter by +/- 200Hz
+    lfoGain.gain.value = 200;
 
     lfo.connect(lfoGain);
     lfoGain.connect(filter.frequency);
@@ -138,13 +221,11 @@ export const startChristmasAmbience = () => {
     noise.start();
     lfo.start();
 
-    // 2. Occasional Wind Chimes
     let chimeTimeout: number;
     const playRandomChime = () => {
-        if (!ambienceNodes) return; // Stop if stopped
+        if (!ambienceNodes) return;
 
         const now = ctx.currentTime;
-        // Pentatonic scale notes (C, E, G, B, C, E)
         const notes = [523.25, 659.25, 783.99, 987.77, 1046.50, 1318.51]; 
         const freq = notes[Math.floor(Math.random() * notes.length)];
         
@@ -156,7 +237,7 @@ export const startChristmasAmbience = () => {
         
         chimeGain.gain.setValueAtTime(0, now);
         chimeGain.gain.linearRampToValueAtTime(0.05, now + 0.05);
-        chimeGain.gain.exponentialRampToValueAtTime(0.001, now + 3); // Long tail
+        chimeGain.gain.exponentialRampToValueAtTime(0.001, now + 3);
         
         osc.connect(chimeGain);
         chimeGain.connect(ctx.destination);
@@ -164,13 +245,11 @@ export const startChristmasAmbience = () => {
         osc.start(now);
         osc.stop(now + 3);
 
-        // Schedule next chime between 2 and 7 seconds
         chimeTimeout = window.setTimeout(playRandomChime, 2000 + Math.random() * 5000);
     };
 
     playRandomChime();
 
-    // Store stop function
     ambienceNodes = {
         stop: () => {
             try {
@@ -178,7 +257,6 @@ export const startChristmasAmbience = () => {
               lfo.stop();
               clearTimeout(chimeTimeout);
               gain.disconnect();
-              // lfoGain.disconnect(); // Optional cleanup
             } catch(e) {}
             ambienceNodes = null;
         }
@@ -202,7 +280,6 @@ export const playPop = () => {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
 
-    // Pleasant "pop" or "ding"
     osc.type = 'sine';
     osc.frequency.setValueAtTime(400, t);
     osc.frequency.linearRampToValueAtTime(600, t + 0.1);
@@ -215,27 +292,23 @@ export const playPop = () => {
 
     osc.start();
     osc.stop(t + 0.5);
-  } catch (e) {
-    // Ignore
-  }
+  } catch (e) {}
 };
 
 export const speakText = (text: string) => {
   if (!('speechSynthesis' in window)) return;
   
-  window.speechSynthesis.cancel(); // Stop any current speech
+  window.speechSynthesis.cancel();
   
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = 'nl-NL';
-  utterance.rate = 0.85; // Slightly slower for clarity
+  utterance.rate = 0.85;
   utterance.pitch = 1.0;
 
-  // Double check voices if empty
   if (voices.length === 0) {
     voices = window.speechSynthesis.getVoices();
   }
 
-  // Improved selection strategy for Dutch voices
   const dutchVoice = voices.find(v => v.lang === 'nl-NL' && v.name.includes('Google'))
     || voices.find(v => v.lang === 'nl-NL' && v.name.includes('Microsoft'))
     || voices.find(v => v.lang === 'nl-NL')
@@ -244,8 +317,6 @@ export const speakText = (text: string) => {
   if (dutchVoice) {
     utterance.voice = dutchVoice;
     utterance.lang = dutchVoice.lang;
-  } else {
-    console.log("No specific Dutch voice found. Using default voice with nl-NL locale hint.");
   }
 
   window.speechSynthesis.speak(utterance);

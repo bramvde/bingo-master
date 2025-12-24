@@ -7,7 +7,7 @@ import { Controls } from './components/Controls';
 import { LastBalls } from './components/LastBalls';
 import { ChristmasScene } from './components/ChristmasScene';
 import { Fireworks } from './components/Fireworks';
-import { initAudio, playPop, playTick, playJingle, speakText, startChristmasAmbience, stopChristmasAmbience } from './utils/sound';
+import { initAudio, playPop, playTick, playSanta, speakText, startChristmasAmbience, stopChristmasAmbience } from './utils/sound';
 import { generateBingoCardsPdf } from './utils/cardGenerator';
 import { Theme } from './types';
 
@@ -17,7 +17,7 @@ const App: React.FC = () => {
   const [currentBall, setCurrentBall] = useState<number | null>(null);
   const [generatedPhrase, setGeneratedPhrase] = useState<string | null>(null);
   const [fireworkTrigger, setFireworkTrigger] = useState(0);
-  const [isFullScreen, setIsFullScreen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   
   // Settings
   const [showPhrases, setShowPhrases] = useState(true);
@@ -65,19 +65,25 @@ const App: React.FC = () => {
     return () => stopChristmasAmbience();
   }, [isXmas, soundEnabled]);
 
+  // Fullscreen Listener
   useEffect(() => {
     const handleFullScreenChange = () => {
-      setIsFullScreen(document.fullscreenElement !== null);
+      setIsFullscreen(!!document.fullscreenElement);
     };
+    
     document.addEventListener('fullscreenchange', handleFullScreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullScreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullScreenChange);
+    };
   }, []);
 
   const toggleFullScreen = () => {
     if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(err => console.error('Failed to enter full screen', err));
+      document.documentElement.requestFullscreen().catch((err) => {
+        console.error(`Error attempting to enable full-screen mode: ${err.message}`);
+      });
     } else {
-      if (document.exitFullscreen) {
+       if (document.exitFullscreen) {
         document.exitFullscreen();
       }
     }
@@ -98,23 +104,29 @@ const App: React.FC = () => {
 
     const nextNum = available[Math.floor(Math.random() * available.length)];
 
-    // Sound Loop during animation
+    // Determine Animation Duration
+    // If Xmas, we use a safe 3000ms for the local "Ho Ho Ho" file
+    const duration = isXmas ? 3000 : 2500;
+
+    // Trigger Santa Sound if Xmas and Sound Enabled
+    // This replaces the "hussling" loop sound
+    if (isXmas && soundEnabled) {
+      playSanta();
+    }
+
+    // Sound Loop during animation (Only for standard theme now)
     const tickInterval = setInterval(() => {
-      if (soundEnabled) {
-        if (isXmas) {
-          playJingle();
-        } else {
-          playTick();
-        }
+      if (soundEnabled && !isXmas) {
+         playTick();
       }
     }, 120);
 
-    // Trigger Fireworks Launch (1.5s into animation, so they fly for 1s and explode at 2.5s)
+    // Trigger Fireworks Launch (1s before reveal)
     setTimeout(() => {
       setFireworkTrigger(t => t + 1);
-    }, 1500);
+    }, duration - 1000);
 
-    // Final Reveal (2.5s)
+    // Final Reveal
     setTimeout(() => {
       clearInterval(tickInterval);
       setIsAnimating(false);
@@ -138,7 +150,7 @@ const App: React.FC = () => {
         speakText(textToSpeak);
       }
 
-    }, 2500); 
+    }, duration); 
 
   }, [history, showPhrases, soundEnabled, voiceEnabled, isXmas]);
 
@@ -227,17 +239,16 @@ const App: React.FC = () => {
         </div>
         
         <div className="flex items-center gap-3 sm:gap-6 text-xs sm:text-sm">
-
-          {/* Fullscreen toggle */}
+          
+          {/* Fullscreen Toggle */}
           <button 
             onClick={toggleFullScreen}
             className={`p-2 rounded-full transition-colors ${isXmas ? 'bg-white/10 hover:bg-white/20 text-yellow-300' : 'bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white'}`}
-            title={isFullScreen ? "Sluit volledig scherm" : "Open volledig scherm"}
+            title={isFullscreen ? "Sluit volledig scherm" : "Volledig scherm"}
           >
-            {isFullScreen ? '🔓' : '🔒'}
+            {isFullscreen ? '🔓' : '🔒'}
           </button>
 
-          
           <button 
             onClick={toggleTheme}
             className={`p-2 rounded-full transition-colors ${isXmas ? 'bg-white/10 hover:bg-white/20 text-yellow-300' : 'bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white'}`}
@@ -273,29 +284,6 @@ const App: React.FC = () => {
               label="Zinnen" 
               checked={showPhrases} 
               onChange={setShowPhrases}
-              icon={
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
-                  <path fillRule="evenodd" d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97a48.901 48.901 0 01-3.476.383.39.39 0 00-.297.17l-2.755 4.133a.75.75 0 01-1.248 0l-2.755-4.133a.39.39 0 00-.297-.17 48.9 48.9 0 01-3.476-.384c-1.978-.29-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.68 3.348-3.97zM6.75 8.25a.75.75 0 01.75-.75h9a.75.75 0 010 1.5h-9a.75.75 0 01-.75-.75zm.75 2.25a.75.75 0 000 1.5H12a.75.75 0 000-1.5H7.5z" clipRule="evenodd" />
-                </svg>
-              }
-            />
-
-            <Toggle 
-              label="Geluid" 
-              checked={soundEnabled} 
-              onChange={setSoundEnabled}
-              icon={
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
-                  <path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318.664-2.66 1.905A9.76 9.76 0 001.5 12c0 .898.121 1.768.35 2.595.341 1.24 1.518 1.905 2.659 1.905h1.93l4.5 4.5c.945.945 2.561.276 2.561-1.06V4.06zM18.584 5.106a.75.75 0 011.06 0c3.808 3.807 3.808 9.98 0 13.788a.75.75 0 11-1.06-1.06 8.25 8.25 0 000-11.668.75.75 0 010-1.06z" />
-                  <path d="M15.932 7.757a.75.75 0 011.061 0 6 6 0 010 8.486.75.75 0 01-1.06-1.061 4.5 4.5 0 000-6.364.75.75 0 010-1.06z" />
-                </svg>
-              }
-            />
-
-            <Toggle 
-              label="Stem" 
-              checked={voiceEnabled} 
-              onChange={setVoiceEnabled}
               icon={
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
                   <path d="M8.25 4.5a3.75 3.75 0 117.5 0v8.25a3.75 3.75 0 11-7.5 0V4.5z" />
