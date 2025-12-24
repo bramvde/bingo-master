@@ -105,8 +105,8 @@ const App: React.FC = () => {
     const nextNum = available[Math.floor(Math.random() * available.length)];
 
     // Determine Animation Duration
-    // If Xmas, we use a safe 3000ms for the local "Ho Ho Ho" file
-    const duration = isXmas ? 3000 : 2500;
+    // If Xmas, we use a safe 2000ms for the local "Ho Ho Ho" file
+    const duration = isXmas ? 2000 : 1500;
 
     // Trigger Santa Sound if Xmas and Sound Enabled
     // This replaces the "hussling" loop sound
